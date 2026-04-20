@@ -1,3 +1,4 @@
+status: working on permissive
 patch by patch by: https://github.com/n-bilinskyi
 currently im facing selinux denial when setprop but on permissive it works fine 
 
