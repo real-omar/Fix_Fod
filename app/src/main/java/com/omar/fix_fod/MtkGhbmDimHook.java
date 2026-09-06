@@ -252,6 +252,8 @@ public class MtkGhbmDimHook {
                 + "'Fields on...'/'Methods on...' dump lines so I can add the right one.");
         return null;
     }
+
+    private static Object getFieldAny(Object obj, String[] candidates) {
         Class<?> cls = obj.getClass();
         while (cls != null) {
             for (String name : candidates) {
