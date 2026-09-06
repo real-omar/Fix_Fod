@@ -331,8 +331,14 @@ public class MtkGhbmDimHook {
 
             try {
                 wm.addView(sDimView, sDimParams);
+                // Some OEM WMS implementations ignore a non-1.0 alpha passed to the
+                // initial addView() call and only honor it starting from the first
+                // updateViewLayout(). Force one immediately so it starts transparent
+                // instead of momentarily full-black.
+                sDimParams.alpha = 0f;
+                wm.updateViewLayout(sDimView, sDimParams);
                 sDimAdded = true;
-                Log.d(TAG, "MTK GHBM dim view added");
+                Log.d(TAG, "MTK GHBM dim view added, alpha forced to 0");
             } catch (Throwable t) {
                 Log.e(TAG, "Failed to add dim view", t);
             }
@@ -361,8 +367,10 @@ public class MtkGhbmDimHook {
     private static void setDimAlpha(float alpha) {
         synchronized (sLock) {
             if (!sDimAdded || sDimView == null || sDimParams == null || sWindowManager == null) return;
-            if (Math.abs(sDimParams.alpha - alpha) < 0.001f) return;
-            sDimParams.alpha = Math.max(0f, Math.min(1f, alpha));
+            float clamped = Math.max(0f, Math.min(1f, alpha));
+            if (Math.abs(sDimParams.alpha - clamped) < 0.001f) return;
+            Log.d(TAG, "setDimAlpha: " + sDimParams.alpha + " -> " + clamped);
+            sDimParams.alpha = clamped;
             try {
                 sWindowManager.updateViewLayout(sDimView, sDimParams);
             } catch (Throwable t) {
