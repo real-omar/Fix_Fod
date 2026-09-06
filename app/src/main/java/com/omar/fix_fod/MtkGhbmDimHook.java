@@ -139,20 +139,39 @@ public class MtkGhbmDimHook {
             }
 
             if (sDimParams == null) {
+                // TYPE_NAVIGATION_BAR_PANEL is a hidden constant — not in the public SDK
+                // stubs this module compiles against, so pull it via reflection. Falls
+                // back to the public TYPE_APPLICATION_OVERLAY if the hidden field ever
+                // moves/renames.
+                int type;
+                try {
+                    type = XposedHelpers.getStaticIntField(WindowManager.LayoutParams.class,
+                            "TYPE_NAVIGATION_BAR_PANEL");
+                } catch (Throwable t) {
+                    type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+                }
+
                 sDimParams = new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
+                        type,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                                 | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                         PixelFormat.TRANSLUCENT);
-                sDimParams.title = "MtkGhbmDim";
+
+                try {
+                    XposedHelpers.setObjectField(sDimParams, "title", "MtkGhbmDim");
+                } catch (Throwable ignored) {}
+
                 sDimParams.width = WindowManager.LayoutParams.MATCH_PARENT;
                 sDimParams.height = WindowManager.LayoutParams.MATCH_PARENT;
                 sDimParams.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
                 sDimParams.alpha = 0f;
+
                 try {
-                    sDimParams.privateFlags = WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
+                    int trustedOverlayFlag = XposedHelpers.getStaticIntField(
+                            WindowManager.LayoutParams.class, "PRIVATE_FLAG_TRUSTED_OVERLAY");
+                    XposedHelpers.setIntField(sDimParams, "privateFlags", trustedOverlayFlag);
                 } catch (Throwable ignored) {}
             }
 
