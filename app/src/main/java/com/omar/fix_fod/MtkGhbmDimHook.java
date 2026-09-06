@@ -49,59 +49,108 @@ public class MtkGhbmDimHook {
     private static volatile boolean sDimAdded = false;
     private static final Object sLock = new Object();
 
+    // TEMP: toggle bypassed for debugging — always on. Revert to the XSharedPreferences
+    // check once the hook itself is confirmed working.
     private static boolean isEnabled() {
-        if (sPrefs == null) {
-            sPrefs = new XSharedPreferences("com.omar.fix_fod", PREFS_NAME);
-        }
-        sPrefs.reload();
-        return sPrefs.getBoolean(PREF_KEY_ENABLED, false);
+        return true;
     }
 
     public static void hook(ClassLoader cl) {
         try {
             Class<?> cls = XposedHelpers.findClass(CLS_UDFPS_CONTROLLER, cl);
+            Log.d(TAG, "Found UdfpsController: " + cls.getName());
+            dumpMethods(cls);
 
-            // Mirror the real overlay lifecycle: add/remove our dim view alongside it.
-            XposedBridge.hookAllMethods(cls, "hideUdfpsOverlay", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!isEnabled()) return;
-                    removeDimView();
-                }
-            });
+            int hooked = 0;
+            try {
+                XposedBridge.hookAllMethods(cls, "hideUdfpsOverlay", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        Log.d(TAG, "hideUdfpsOverlay fired");
+                        if (!isEnabled()) return;
+                        removeDimView();
+                    }
+                });
+                hooked++;
+                Log.d(TAG, "hooked hideUdfpsOverlay OK");
+            } catch (Throwable t) {
+                Log.e(TAG, "FAILED to hook hideUdfpsOverlay", t);
+            }
 
             for (String showMethod : new String[]{"showUdfpsOverlay", "onUdfpsOverlayShown"}) {
                 try {
                     XposedBridge.hookAllMethods(cls, showMethod, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
+                            Log.d(TAG, showMethod + " fired");
                             if (!isEnabled()) return;
                             ensureDimView(param.thisObject);
                         }
                     });
-                } catch (Throwable ignored) {}
+                    hooked++;
+                    Log.d(TAG, "hooked " + showMethod + " OK");
+                } catch (Throwable t) {
+                    Log.w(TAG, "could not hook " + showMethod + " (may not exist in this build)");
+                }
             }
 
             // Alpha follows brightness while the finger is down, same formula as the patch.
-            XposedBridge.hookAllMethods(cls, "onFingerDown", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (!isEnabled()) return;
-                    ensureDimView(param.thisObject);
-                    updateAlpha(param.thisObject);
-                }
-            });
+            try {
+                XposedBridge.hookAllMethods(cls, "onFingerDown", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        Log.d(TAG, "onFingerDown fired, isEnabled=" + isEnabled());
+                        if (!isEnabled()) return;
+                        ensureDimView(param.thisObject);
+                        updateAlpha(param.thisObject);
+                    }
+                });
+                hooked++;
+                Log.d(TAG, "hooked onFingerDown OK");
+            } catch (Throwable t) {
+                Log.e(TAG, "FAILED to hook onFingerDown", t);
+            }
 
-            XposedBridge.hookAllMethods(cls, "onFingerUp", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (!isEnabled()) return;
-                    setDimAlpha(0f);
-                }
-            });
+            try {
+                XposedBridge.hookAllMethods(cls, "onFingerUp", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        Log.d(TAG, "onFingerUp fired");
+                        if (!isEnabled()) return;
+                        setDimAlpha(0f);
+                    }
+                });
+                hooked++;
+                Log.d(TAG, "hooked onFingerUp OK");
+            } catch (Throwable t) {
+                Log.e(TAG, "FAILED to hook onFingerUp", t);
+            }
+
+            Log.d(TAG, "Total methods hooked: " + hooked);
 
         } catch (XposedHelpers.ClassNotFoundError e) {
             Log.e(TAG, "UdfpsController not found", e);
+        }
+    }
+
+    // One-time dump so we can see the real method/field names on this device's build,
+    // instead of guessing. Check logcat for "PHH-MtkGhbmDim" after this fires.
+    private static void dumpMethods(Class<?> cls) {
+        try {
+            StringBuilder sb = new StringBuilder("Methods on ").append(cls.getName()).append(":\n");
+            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                sb.append("  ").append(m.getName()).append("(")
+                        .append(m.getParameterTypes().length).append(" args)\n");
+            }
+            Log.d(TAG, sb.toString());
+
+            StringBuilder fb = new StringBuilder("Fields on ").append(cls.getName()).append(":\n");
+            for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
+                fb.append("  ").append(f.getType().getSimpleName()).append(" ").append(f.getName()).append("\n");
+            }
+            Log.d(TAG, fb.toString());
+        } catch (Throwable t) {
+            Log.e(TAG, "dumpMethods failed", t);
         }
     }
 
