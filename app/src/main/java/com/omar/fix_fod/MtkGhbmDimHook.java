@@ -104,9 +104,12 @@ public class MtkGhbmDimHook {
             try {
                 XposedBridge.hookAllMethods(cls, "onFingerDown", new XC_MethodHook() {
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        Log.d(TAG, "onFingerDown fired, isEnabled=" + isEnabled());
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        Log.d(TAG, "onFingerDown (before) fired, isEnabled=" + isEnabled());
                         if (!isEnabled()) return;
+                        // Applied BEFORE the real method runs, since that's what triggers
+                        // the HBM brightness ramp — dimming after the fact leaves a brief
+                        // flash on screen first.
                         ensureDimView(param.thisObject);
                         updateAlpha(param.thisObject);
                     }
