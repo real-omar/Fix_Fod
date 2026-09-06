@@ -33,9 +33,9 @@ import de.robv.android.xposed.XposedHelpers;
  * Toggle: /data/data/<module_pkg>/shared_prefs/fix_fod_prefs.xml -> "mtkghbm_enabled"
  * Re-read on every finger event, so no reboot/respawn needed to flip it.
  */
-public class MtkGhbmDimHook {
+public class MtkGhbmDimHook_AlwaysDimmed {
 
-    private static final String TAG = "PHH-MtkGhbmDim";
+    private static final String TAG = "PHH-MtkGhbmDim-OLD";
 
     private static final String PREFS_NAME = "fix_fod_prefs";
     private static final String PREF_KEY_ENABLED = "mtkghbm_enabled";
@@ -144,7 +144,7 @@ public class MtkGhbmDimHook {
     }
 
     // One-time dump so we can see the real method/field names on this device's build,
-    // instead of guessing. Check logcat for "PHH-MtkGhbmDim" after this fires.
+    // instead of guessing. Check logcat for "PHH-MtkGhbmDim-OLD" after this fires.
     private static void dumpMethods(Class<?> cls) {
         try {
             StringBuilder sb = new StringBuilder("Methods on ").append(cls.getName()).append(":\n");
@@ -334,14 +334,8 @@ public class MtkGhbmDimHook {
 
             try {
                 wm.addView(sDimView, sDimParams);
-                // Some OEM WMS implementations ignore a non-1.0 alpha passed to the
-                // initial addView() call and only honor it starting from the first
-                // updateViewLayout(). Force one immediately so it starts transparent
-                // instead of momentarily full-black.
-                sDimParams.alpha = 0f;
-                wm.updateViewLayout(sDimView, sDimParams);
                 sDimAdded = true;
-                Log.d(TAG, "MTK GHBM dim view added, alpha forced to 0");
+                Log.d(TAG, "MTK GHBM dim view added");
             } catch (Throwable t) {
                 Log.e(TAG, "Failed to add dim view", t);
             }
@@ -382,21 +376,16 @@ public class MtkGhbmDimHook {
         }
     }
 
-    // Ported from MtkUdfpsScrimController in the patch. DIM_SOFTEN only eases off
-    // the dim at higher brightness (where a flat multiplier was overcorrecting);
-    // at low brightness it stays near full strength since HBM's relative jump is
-    // bigger there and needs the full compensating dim.
-    private static final float DIM_SOFTEN_AT_MAX = 0.8f; // softening applied at brightness=255
-    private static final float DIM_SOFTEN_AT_MIN = 1.0f; // no softening at brightness=0
+    // Ported directly from MtkUdfpsScrimController in the patch, softened by a flat
+    // multiplier so the dim is less noticeable overall.
+    private static final float DIM_SOFTEN = 0.8f;
 
     private static float calculateAlpha(int brightness) {
         float alpha = 1.0f - (brightness / 255.0f);
         if (brightness < 25) {
             alpha = alpha * 0.95f;
         }
-        float t = Math.max(0f, Math.min(1f, brightness / 255.0f));
-        float soften = DIM_SOFTEN_AT_MIN + (DIM_SOFTEN_AT_MAX - DIM_SOFTEN_AT_MIN) * t;
-        alpha *= soften;
+        alpha *= DIM_SOFTEN;
         return Math.max(0.0f, Math.min(1.0f, alpha));
     }
 
