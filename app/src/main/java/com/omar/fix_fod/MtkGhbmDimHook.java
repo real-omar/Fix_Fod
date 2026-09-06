@@ -118,6 +118,7 @@ public class MtkGhbmDimHook {
                         Log.d(TAG, "onFingerUp fired");
                         if (!isEnabled()) return;
                         setDimAlpha(0f);
+                        removeDimView(); // safety net in case hideUdfpsOverlay never fires
                     }
                 });
                 hooked++;
@@ -204,6 +205,7 @@ public class MtkGhbmDimHook {
                         type,
                         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                                 | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                         PixelFormat.TRANSLUCENT);
