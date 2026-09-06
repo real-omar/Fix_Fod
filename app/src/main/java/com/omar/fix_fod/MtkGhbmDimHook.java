@@ -33,7 +33,7 @@ import de.robv.android.xposed.XposedHelpers;
  * Toggle: /data/data/<module_pkg>/shared_prefs/fix_fod_prefs.xml -> "mtkghbm_enabled"
  * Re-read on every finger event, so no reboot/respawn needed to flip it.
  */
-public class MtkGhbmDimHook_AlwaysDimmed {
+public class MtkGhbmDimHook {
 
     private static final String TAG = "PHH-MtkGhbmDim-OLD";
 
