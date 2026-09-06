@@ -35,7 +35,7 @@ import de.robv.android.xposed.XposedHelpers;
  */
 public class MtkGhbmDimHook {
 
-    private static final String TAG = "PHH-MtkGhbmDim-OLD";
+    private static final String TAG = "PHH-MtkGhbmDim";
 
     private static final String PREFS_NAME = "fix_fod_prefs";
     private static final String PREF_KEY_ENABLED = "mtkghbm_enabled";
@@ -144,7 +144,7 @@ public class MtkGhbmDimHook {
     }
 
     // One-time dump so we can see the real method/field names on this device's build,
-    // instead of guessing. Check logcat for "PHH-MtkGhbmDim-OLD" after this fires.
+    // instead of guessing. Check logcat for "PHH-MtkGhbmDim" after this fires.
     private static void dumpMethods(Class<?> cls) {
         try {
             StringBuilder sb = new StringBuilder("Methods on ").append(cls.getName()).append(":\n");
@@ -334,8 +334,14 @@ public class MtkGhbmDimHook {
 
             try {
                 wm.addView(sDimView, sDimParams);
+                // Some OEM WMS implementations ignore a non-1.0 alpha passed to the
+                // initial addView() call and only honor it starting from the first
+                // updateViewLayout(). Force one immediately so it starts transparent
+                // instead of momentarily full-black.
+                sDimParams.alpha = 0f;
+                wm.updateViewLayout(sDimView, sDimParams);
                 sDimAdded = true;
-                Log.d(TAG, "MTK GHBM dim view added");
+                Log.d(TAG, "MTK GHBM dim view added, alpha forced to 0");
             } catch (Throwable t) {
                 Log.e(TAG, "Failed to add dim view", t);
             }
