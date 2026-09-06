@@ -1,8 +1,14 @@
 package com.omar.fix_fod;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Rect;
+import android.graphics.RectF;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
@@ -155,7 +161,97 @@ public class MtkGhbmDimHook {
         }
     }
 
-    private static Object getFieldAny(Object obj, String[] candidates) {
+    // Custom view that dims the whole screen EXCEPT a circular hole over the FOD
+    // sensor, so the sensor area stays at full brightness for the optical scan
+    // while everything else darkens. Software layer is required for PorterDuff
+    // CLEAR compositing to punch a real hole (hardware layers can't do this).
+    private static class DimHoleView extends View {
+        private float holeCx = -1, holeCy = -1, holeRadius = 0;
+        private final Paint blackPaint = new Paint();
+        private final Paint clearPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        DimHoleView(Context ctx) {
+            super(ctx);
+            blackPaint.setColor(Color.BLACK);
+            clearPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
+            setLayerType(LAYER_TYPE_SOFTWARE, null);
+        }
+
+        void setHole(float cx, float cy, float radius) {
+            this.holeCx = cx;
+            this.holeCy = cy;
+            this.holeRadius = radius;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            canvas.drawRect(0, 0, getWidth(), getHeight(), blackPaint);
+            if (holeRadius > 0) {
+                canvas.drawCircle(holeCx, holeCy, holeRadius, clearPaint);
+            }
+        }
+    }
+
+    // Tries several known field/method shapes for the sensor's on-screen circle.
+    // Logs which (if any) worked so we can lock in the right one for this build.
+    private static float[] getSensorCircle(Object udfpsController) {
+        // 1) Direct Rect field on the controller itself.
+        for (String name : new String[]{"mSensorBounds", "sensorBounds"}) {
+            try {
+                Object val = XposedHelpers.getObjectField(udfpsController, name);
+                if (val instanceof Rect) {
+                    Rect r = (Rect) val;
+                    Log.d(TAG, "Sensor bounds from field '" + name + "': " + r);
+                    return new float[]{r.exactCenterX(), r.exactCenterY(),
+                            Math.min(r.width(), r.height()) / 2f};
+                }
+                if (val instanceof RectF) {
+                    RectF r = (RectF) val;
+                    Log.d(TAG, "Sensor bounds from field '" + name + "': " + r);
+                    return new float[]{r.centerX(), r.centerY(),
+                            Math.min(r.width(), r.height()) / 2f};
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 2) Nested UdfpsOverlayParams-style object holding sensorBounds.
+        for (String holderField : new String[]{"mOverlayParams", "overlayParams"}) {
+            try {
+                Object holder = XposedHelpers.getObjectField(udfpsController, holderField);
+                if (holder == null) continue;
+                for (String rectField : new String[]{"sensorBounds", "mSensorBounds"}) {
+                    try {
+                        Object val = XposedHelpers.getObjectField(holder, rectField);
+                        if (val instanceof Rect) {
+                            Rect r = (Rect) val;
+                            Log.d(TAG, "Sensor bounds from " + holderField + "." + rectField + ": " + r);
+                            return new float[]{r.exactCenterX(), r.exactCenterY(),
+                                    Math.min(r.width(), r.height()) / 2f};
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 3) A getter method directly on the controller.
+        for (String method : new String[]{"getSensorBounds", "getSensorRect"}) {
+            try {
+                Object val = XposedHelpers.callMethod(udfpsController, method);
+                if (val instanceof Rect) {
+                    Rect r = (Rect) val;
+                    Log.d(TAG, "Sensor bounds from method '" + method + "': " + r);
+                    return new float[]{r.exactCenterX(), r.exactCenterY(),
+                            Math.min(r.width(), r.height()) / 2f};
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        Log.w(TAG, "Could not resolve sensor bounds by any known field/method — "
+                + "dim layer will NOT punch a hole over the sensor. Send the "
+                + "'Fields on...'/'Methods on...' dump lines so I can add the right one.");
+        return null;
+    }
         Class<?> cls = obj.getClass();
         while (cls != null) {
             for (String name : candidates) {
@@ -183,9 +279,14 @@ public class MtkGhbmDimHook {
             sWindowManager = wm;
 
             if (sDimView == null) {
-                sDimView = new View(context);
-                sDimView.setBackgroundColor(Color.BLACK);
-                sDimView.setVisibility(View.VISIBLE);
+                DimHoleView v = new DimHoleView(context);
+                v.setVisibility(View.VISIBLE);
+                sDimView = v;
+            }
+
+            float[] circle = getSensorCircle(udfpsController);
+            if (circle != null && sDimView instanceof DimHoleView) {
+                ((DimHoleView) sDimView).setHole(circle[0], circle[1], circle[2]);
             }
 
             if (sDimParams == null) {
