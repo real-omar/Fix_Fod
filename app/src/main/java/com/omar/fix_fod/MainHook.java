@@ -147,6 +147,7 @@ public class MainHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         if (PKG_SYSTEMUI.equals(lpparam.packageName)) {
             hookUdfpsController(lpparam.classLoader);
+            MtkGhbmDimHook.hook(lpparam.classLoader);
         } else if (PKG_SYSTEM.equals(lpparam.packageName)) {
             hookAuthService(lpparam.classLoader);
             hookFingerprintCallback(lpparam.classLoader);
