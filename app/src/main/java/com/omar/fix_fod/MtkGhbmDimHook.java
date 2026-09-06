@@ -382,12 +382,16 @@ public class MtkGhbmDimHook {
         }
     }
 
-    // Ported directly from MtkUdfpsScrimController in the patch.
+    // Ported from MtkUdfpsScrimController in the patch, with an added SOFTEN factor
+    // so the dim is a bit lighter overall and less noticeable at normal brightness.
+    private static final float DIM_SOFTEN = 0.6f;
+
     private static float calculateAlpha(int brightness) {
         float alpha = 1.0f - (brightness / 255.0f);
         if (brightness < 25) {
             alpha = alpha * 0.95f;
         }
+        alpha *= DIM_SOFTEN;
         return Math.max(0.0f, Math.min(1.0f, alpha));
     }
 
